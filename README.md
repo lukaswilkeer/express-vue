@@ -4,7 +4,7 @@
 <a href="https://npmjs.org/package/express-vue"><img src="https://badge.fury.io/js/express-vue.svg" alt="Version"></a>
 <a href="https://travis-ci.org/express-vue/express-vue"><img src="https://travis-ci.org/express-vue/express-vue.svg?branch=master" alt="Build Status"></a>
 <a href="https://david-dm.org/express-vue/express-vue"><img src="https://david-dm.org/express-vue/express-vue.svg?theme=shields.io" alt="Dependency Status"></a>
-<a href="https://coveralls.io/r/express-vue/express-vue"><img src="https://coveralls.io/repos/express-vue/express-vue/badge.svg" alt="Coverage Status"></a>
+<a href="https://codecov.io/gh/express-vue/express-vue"><img src="https://codecov.io/gh/express-vue/express-vue/branch/master/graph/badge.svg" alt="Codecov" /></a>
 <a href="https://lima.codeclimate.com/github/express-vue/express-vue"><img src="https://lima.codeclimate.com/github/express-vue/express-vue/badges/gpa.svg" /></a>
 <a href="https://greenkeeper.io"><img src="https://badges.greenkeeper.io/express-vue/express-vue.svg" /></a>
 </p>
@@ -12,12 +12,37 @@
 
 # express-vue
 
-A Simple way of using Server Side rendered Vue.js 2.0+ natively in Express using `res.render()`
+A Simple way of using Server Side rendered Vue.js 2.0+ natively in Express using streams
 
-If you want to use vue.js and setup a large scale web application that is server side rendered, using Node+Express, but you want to use all the fantastic tools
-given to you by Vue.js. Then this is the library for you.
+If you want to use vue.js and setup a large scale web application that is server side rendered, using Node+Express, but you want to use all the fantastic tools given to you by Vue.js. Then this is the library for you.
 
-The idea is simple use Node+Express for your Controller and Models, and Vue.js for your Views.. you can have a secure server side rendered website without all the hassle. Your Controller will pass in the data to your View through `res.render('view', {data})`.
+The idea is simple use Node+Express for your Controller and Models, and Vue.js for your Views.. you can have a secure server side rendered website without all the hassle. Your Controller will pass in the data to your View through
+
+`res.renderVue('view', {data}, [{vueOptions}])`.
+
+# Table of Contents
+
+- [Installation](#installation)
+- [Requirements](#requirements)
+    - [ES Modules](#es-modules)
+- [Example / Starter](#example--starter)
+- [Usage](#usage)
+    - [Options](#options)
+        - [VueVersion](#vueversion)
+    - [Components / Mixins / Etc](#components--mixins--etc)
+    - [CSS Inside Components/Views](#css-inside-componentsviews)
+    - [Mixins](#mixins)
+    - [Meta](#meta)
+        - [Structured Data](#structured-data)
+    - [Template](#template)
+- [Vue Dev Tools](#devtools)
+- [Caching](#caching)
+- [Finally](#finally)
+- [Typescript Support](#typescript-support)
+- [SailsJS Support](#sailsjs-support)
+- [Migration to Webpack Renderer](#migration-to-webpack-renderer)
+- [V5 Migration](#v5-migration)
+- [Changelog](#changelog)
 
 
 ## Installation
@@ -30,50 +55,75 @@ $ npm install --save express-vue
 
 Requires Node V6 or greater, and Vue 2.0 or greater. (Latest Vue.js is included in this project)
 
-## Examples
+### ES Modules
 
-A Super Simple example can be found at [express-vue/express-vue-super-simple](https://github.com/express-vue/express-vue-super-simple)
+If using ES module statments like
 
-A full example can be found at: [express-vue/express-vue-example](https://github.com/express-vue/express-vue-example)
+```js
+export default {}
+//or
+import foo from "foo";
+```
 
+Or any other ES features you will need to also install `babel-core` and `babel-preset-env`.
+
+```sh
+npm i -D babel-core babel-preset-env
+```
+
+Then place a `.babelrc` file in your root. here's an example targeting last two versions
+
+```json
+{
+  "presets": [
+    ["env", {
+      "targets": {
+        "browsers": ["last 2 versions"]
+      }
+    }]
+  ]
+}
+```
+
+## Example / Starter
+
+An example / starter can be found [here](https://github.com/express-vue/express-vue-mvc-starter)
 
 ## Usage
 
-```js
-var expressVue = require('express-vue');
+This is the minimum required setup.
+If you don't provide a `vueVersion` it will use the latest one when the project was published.
+If there is no `rootPath` it will assume the root is the parent directory of `node_modules`.
 
+```js
+var expressVue = require("express-vue");
 var app = express();
-app.set('views', __dirname + '/app/views');
-//Optional if you want to specify the components directory separate to your views, and/or specify a custom layout.
-app.set('vue', {
-    //ComponentsDir is optional if you are storing your components in a different directory than your views
-    componentsDir: __dirname + '/components',
-    //Default layout is optional it's a file and relative to the views path, it does not require a .vue extension.
-    //If you want a custom layout set this to the location of your layout.vue file.
-    defaultLayout: 'layout'
+
+//pass your app through express-vue here
+//expressVueOptions is optional and explained later in the docs
+//this is a promise, so you can either await it or do this.
+expressVue.use(app, expressVueOptions).then(() => {
+    //the rest of your express routes.
 });
-app.engine('vue', expressVue);
-app.set('view engine', 'vue');
 ```
 
 In your route, assuming you have a main.vue
 
 ```js
 router.get('/', (req, res, next) => {
-    res.render('main', {
-        data: {
-            otherData: 'Something Else'
-        },
-        vue: {
-            head: {
-                title: 'Page Title',
-                head: [
-                    { property:'og:title', content: 'Page Title'},
-                    { name:'twitter:title', content: 'Page Title'},
-                ]
-            }    
+    const data: {
+        otherData: 'Something Else'
+    };
+    req.vueOptions: {
+        head: {
+            title: 'Page Title',
+            metas: [
+                { property:'og:title', content: 'Page Title'},
+                { name:'twitter:title', content: 'Page Title'},
+            ]
         }
-    });
+    }
+    res.renderVue('main.vue', data, req.vueOptions);
 })
 ```
 
@@ -84,42 +134,70 @@ will overwrite it.
 
 ### Remember to always write your data objects in your .vue files as functions!
 
-## Components
+## Options
 
-To add components to your .vue files you can either write them in manually.. or pass them in through res.render
+|key|type|description|required?|default value|
+|-|-|-|-|-|
+|rootPath|string|this is the path the library will use as the base for all lookups| optional| the directory that your `../node_modules` lives in|
+|vueVersion|string or object|this is where you specify which version of vue.js's library to use from the CDN | optional| the latest version as of publishing this|
+|layout|Object|this is the object for customzing the html, body, and template tags| optional| has default value which is in the example below|
+|vue|Object|this is the global config for vue for example you can set a global title, or a script tag in your head block everything here is global|optional|no default value|
+|data|Object|this is the global data object, this will be merged in to your .vue file's data block on every route, you can override this per route.|optional|no default value|
+
+Here's an example, with the default layout config included for you to see...
 
 ```js
-router.get('/', (req, res, next) => {
-    res.render('main', {
-        data : {
-            otherData: 'Something Else'
-        },
-        vue: {
-            head: {
-                title: 'Page Title',
-            },
-            components: ['myheader', 'myfooter']
+const vueOptions = {
+    rootPath: path.join(__dirname, '../example/views'),
+    head: {
+        title: 'Hello this is a global title',
+        scripts: [
+            { src: 'https://example.com/script.js' },
+        ],
+        styles: [
+            { style: '/assets/rendered/style.css' }
+        ]
+    },
+    data: {
+        foo: true,
+        bar: 'yes',
+        qux: {
+            id: 123,
+            baz: 'anything you wish, you can have any kind of object in the data object, it will be global and on every route'
         }
-
-    });
-})
+    }
+};
+expressVue.use(app, vueOptions);
 ```
 
-This will trigger the library to look in the `componentsDir` folder for any component matching, it _MUST_ be an array
+## Components / Mixins / Etc
 
-Then in your .vue file you can just use the element directive and it will work out of the box
+### NOTE: Components and Mixins need to be OUTSIDE of the Pages Root folder.
 
-```vue
-<template>
-    <div>
-        <myheader></myheader>
-        <h1>{{otherData}}</h1>
-        <myfooter></myfooter>
-    </div>
-</template>
+When including components/mixins/etc the directory it looks is going to be relative to the file you're working in currently.
+assuming the below is running in a folder with a subdirectory `components` and a directory `mixins` in a parent, it would look like this.
+when importing .vue files and .js files from node modules you can just import them the normal way you import a module.
+
+```html
+<script>
+import messageComp from './components/message-comp.vue';
+import users from './components/users.vue';
+import exampleMixin from '../mixins/exampleMixin';
+import externalComponent from 'foo/bar/external.vue';
+export default {
+    mixins: [exampleMixin],
+    data: function () {
+        return {
+        }
+    },
+    components: {
+        messageComp,
+        users,
+        externalComponent
+    }
+}
+</script>
 ```
-
-Note: This isn't available in the layout.vue file yet, only the .vue files you specify in your express route.
 
 ## CSS inside components/views
 
@@ -128,7 +206,7 @@ In the future I will be creating build tools to handle compiling the .vue files 
 and more efficient at runtime. But for dev mode, it will compile everything at runtime, so you can edit and preview faster.
 
 ```html
-<style lang="css">
+<style>
     .test {
         border: 2px;
     }
@@ -144,7 +222,7 @@ You can now use Mixins, lets say you have an file called `exampleMixin.js` and i
 
 `examplemixin.js`
 ```js
-export default {
+module.exports {
     methods: {
         hello: function () {
             console.log('Hello');
@@ -155,23 +233,17 @@ export default {
 
 In your route you would declare it by placing `mixins: [exampleMixin]` in your vue object.
 
-```js
-import exampleMixin from '.exampleMixin';
-router.get('/', (req, res, next) => {
-    res.render('main', {
-        data : {
-            otherData: 'Something Else'
-        },
-        vue: {
-            head: {
-                title: 'Page Title',
-            },
-            components: ['myheader', 'myfooter'],
-            mixins: [exampleMixin]
+```html
+<script>
+import exampleMixin from '../mixins/exampleMixin';
+export default {
+    mixins: [exampleMixin],
+    data: function () {
+        return {
         }
-
-    });
-})
+    }
+}
+</script>
 ```
 You can now use this in your .Vue file, like so
 
@@ -186,33 +258,42 @@ work here. Just add a `meta` array into your `head` object, with support for bot
 (Note we don't support shorthand here, and no support for google+ just yet, that will come soon).
 
 ```js
-head: {
-    title: 'It will be a pleasure',
-    // Meta tags
-    meta: [
-        { name: 'application-name', content: 'Name of my application' },
-        { name: 'description', content: 'A description of the page', id: 'desc' } // id to replace intead of create element
-        // ...
-        // Twitter
-        { name: 'twitter:title', content: 'Content Title' },
-        // ...
-        // Facebook / Open Graph
-        { property: 'fb:app_id', content: '123456789' },
-        { property: 'og:title', content: 'Content Title' },
-        // ...
+const vueOptions = {
+    head: {
+        title: 'It will be a pleasure',
+        // Meta tags
+        metas: [
+            { name: 'application-name', content: 'Name of my application' },
+            { name: 'description', content: 'A description of the page', id: 'desc' } // id to replace intead of create element
+            // ...
+            // Twitter
+            { name: 'twitter:title', content: 'Content Title' },
+            // ...
+            // Facebook / Open Graph
+            { property: 'fb:app_id', content: '123456789' },
+            { property: 'og:title', content: 'Content Title' },
+            // ...
+            // Rel
+            { rel: 'icon', type: 'image/png', href: '/assets/favicons/favicon-32x32.png', sizes: '32x32' }
+            // Generic rel for things like icons and stuff
+        ],
         // Scripts
-        { script: '/assets/scripts/hammer.min.js' },
-        { script: '/assets/scripts/vue-touch.min.js', charset: 'utf-8' },
-        // Note with Scripts [charset] is optional defaults to utf-8
-        // ...
+        scripts:[
+            { src: '/assets/scripts/hammer.min.js' },
+            { src: '/assets/scripts/vue-touch.min.js', charset: 'utf-8' },
+            // Note with Scripts [charset] is optional defaults to utf-8
+            // ...
+        ],
         // Styles
-        { style: '/assets/rendered/style.css' }
-        { style: '/assets/rendered/style.css', type: 'text/css' }
-        { style: '/assets/rendered/style.css', type: 'text/css', rel: 'stylesheet' }
-        // Note with Styles, [type] and [rel] are optional...
-        // ...
-    ],
+        styles: [
+            { style: '/assets/rendered/style.css' }
+            { style: '/assets/rendered/style.css', type: 'text/css' }
+            // Note with Styles, [type] is optional...
+            // ...
+        ],
+    }
 }
+expressVue.use(app, vueOptions);
 ```
 
 ## Structured Data
@@ -222,74 +303,56 @@ https://developers.google.com/search/docs/guides/intro-structured-data
 
 
 ```js
-head: {
-    title: 'It will be a pleasure',
-    structuredData: {
-        "@context": "http://schema.org",
-        "@type": "Organization",
-        "url": "http://www.your-company-site.com",
-        "contactPoint": [{
-            "@type": "ContactPoint",
-            "telephone": "+1-401-555-1212",
-            "contactType": "customer service"
-        }]
+const vueOptions = {
+    head: {
+        title: 'It will be a pleasure',
+        structuredData: {
+            "@context": "http://schema.org",
+            "@type": "Organization",
+            "url": "http://www.your-company-site.com",
+            "contactPoint": [{
+                "@type": "ContactPoint",
+                "telephone": "+1-401-555-1212",
+                "contactType": "customer service"
+            }]
+        }
     }
 }
+```
+## Template
+
+If you want to have a custom layout you can, here is the default layout, each part is overridable.
+
+```js
+const vueOptions = {
+    //...
+    template: {
+        html: {
+            start: '<!DOCTYPE html><html>',
+            end: '</html>'
+        },
+        body: {
+            start: '<body>',
+            end: '</body>'
+        }
+        template: {
+            start: '<div id="app">',
+            end: '</div>'
+        }
+    }
+    //...
+};
+expressVue.use(app, vueOptions);
 ```
 
 
 ## DevTools
 
-To use the amazing Vue.js DevTools please set the environment variable `VUE_DEV=true`
+To use the amazing Vue.js DevTools please set the environment variable `VUE_DEV=true`this will also trigger the development version of vue to be included in the head.
 
 ## Caching
 
-This has caching, and its highly recomended, if you want to enable caching please use the environment variable `VUE_CACHE_ENABLED=true`
-
-To disable caching on keys in your data object use this
-
-```js
-app.set('vue', {
-    componentsDir: path.join(__dirname, '/views/components'),
-    defaultLayout: 'layout',
-    cache: {
-        ignoredKeys: ['csrf', 'foo', 'bar']
-    }
-});
-```
-
-## Optional
-
-If you want to have a custom layout you can, here is an example layout.vue file which you can place relative to your views path.
-
-It's required to set the `{{{app}}}` and `{{{script}}}` tags where you want the layout body and script to go.
-If you want to set a title or other meta data, you can add them to the vue metadata object, you can look at the above
-examples for how to do that.
-
-Finally you'll need to set the link to your copy of vue.js in the script... (this will become automatic soon)
-
-```vue
-<template>
-    <!DOCTYPE html>
-    <html lang="en">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-            <script src="assets/scripts/vue.js" charset="utf-8"></script>
-        </head>
-        <body>
-            {{{app}}}
-            {{{script}}}
-        </body>
-    </html>
-</template>
-
-<script>
-</script>
-
-<style lang="css">
-</style>
-```
+Caching is now enabled by default, in dev mode hopefuly you're using something like nodemon/gulp/grunt etc, which restarts the server on file change.. otherwise you will need to stop and restart the server if you change your files.. which is normal.
 
 ## Typescript support
 
@@ -301,66 +364,114 @@ import expressVue = require('express-vue');
 
 ## Sailsjs Support
 
-Thanks to @duffpod for this help.
+This is middleware now so support for sails should just work as middleware.
 
-Generate a Sails project with sails new your-app --no-frontend
-Install express-vue with npm install express-vue --save
-Go to the view config of Sails app at your-app/config/views.js and replace the engine: 'ejs', with this:
+## Migration to Webpack Renderer
 
-```js
-  engine: {
-    ext: 'vue',
-    fn: (function() {
-      return require('express-vue');
-    })()
-  },
-```
+- change `rootPath` to `pagesPath`
+- remove `vueVersion`
+- install `webpack` `vue-loader` and `css-loader`
+- remove `.babelrc` if you have one
+- if you're using regular babel packages switch to the `@babel` versions `@babel/core @babel/preset-env @babel/preset-es2015`
+- remove vuejs
+- move your expressVue options into a file on the root of your directory (same level as node_modules) and call it `expressvue.config.js`
+- Use the new init syntax `expressVue.use(expressApp);` this is a async function, so please either await it or use it in a promise.
 
-Also need to set the layout: 'layout', to layout: false, as it will be ignored by Sails anyway.
 
-Now we need to create views folder in the Sails app. mkdir your-app/views/ && touch your-app/views/homepage.vue. Note, that your-app/config/routes.js is already pointing the homepage-file to the localhost:1337/.
-Edit the homepage.vue to add your Vue.js content to it, like:
+## V5 Migration
 
-```html
-<template>
-  <div>
-    <h1>Hello, world!</h1>
-  </div>
-</template>
+- Ditched the custom parser/renderer and moved to using `vue-pronto` which uses `Vueify`
+- Re-structured the vueOptions
+- Added `req.vueOptions` as a global.
+- Removed the vue parent object with the child of head, this was un-needed its now just `vueOptions.head` instead of `vueOptions.vue.head`
+- When using `res.renderVue` the filename requires an extention now.
+- Paths are now RELATIVE to the file you're currently in ... YAAAY
+- Node Modules are supported, for both javascript and vue file imports inside .vue files ... YAAAY
+- Massive Performance gains
+- 100% compatability with vueJS
+- Migration to Vue-Pronto
 
-<script>
-export default {
-  data() {
-    return {}
-  }
-};
-</script>
-```
+Express-vue-renderer got too heavy, the architecture became too messy, and it was slow. It needed to get thrown out. Enter vue-pronto it uses vueify under the hood, and is much more modular. this will be much easier going forward to maintain.
 
-After all, go to the config/http.js in your project. There will be the middleware object. You need to add the customMiddleware function AFTER it, so everything looks like this:
+### Changes to the Vue Options Object
+
+There's been some big changes to this object, so before it would look like this
 
 ```js
-module.exports.http = {
-  middleware: {
-
-  },
-  customMiddleware: function(app) {
-    app.set('vue', {
-      // configure express-vue here
-      // do not use __dirname here, otherwise the path will look like:
-      // /Users/username/your-project/config/components
-      // componentsDir: app.settings.views + '/components',
-    });
-  }
+const vueOptions = {
+    vue: {
+        head: {
+            meta: [
+                { script: 'https://unpkg.com/vue@2.4.2/dist/vue.js'},
+                { name: 'application-name', content: 'Name of my application' },
+                { name: 'description', content: 'A description of the page', id: 'desc' },
+                { style: '/assets/style.css' }
+            ]
+        }
+    }
 };
 ```
+### Now its different ..
+
+- We have automated getting vueJS from the CDN for you, and which version (dev/prod) it should use based on the environment variable `VUE_DEV`.
+- We also broke up the meta object, into metas, scripts, and styles arrays.
+scripts now have scriptSrc which is a string including the <script> elements which will be placed in your head as is.
+- The parent vue object that wraps the head object was unneeded and removed.
+here's the same as above but newer
+
+```js
+const vueOptions = {
+    vueOptions: "2.4.2",
+    head: {
+        metas: [
+            { name: 'application-name', content: 'Name of my application' },
+            { name: 'description', content: 'A description of the page', id: 'desc' },
+        ],
+        styles: [
+            { style: '/assets/style.css' }
+        ]
+    }
+};
+```
+### Vue File changes
+
+Routes before were relative to the `rootPath`... now that is gone... routes for requires are relative to the file you are currently in.
+Also `node_module` paths are working for both .js and .vue includes
+
+### Remember to look at this if you're getting errors!
+
+**`res.renderVue` Changes**
+
+`res.renderVue` now requires an extension for the file you're using in the route. `foo/bar` now `foo/bar.vue`
+
+### New
+
+Global `req.vueOptions`. this is super handy for passing options around between middleware.
 
 ## Changelog
 
-v3 has seriously changed the object you pass into the vue file.. so please if migrating from
-an earlier version (and you should). Take the time to look at the new object.
+#### V5
+- Ditched the custom parser/renderer and moved to using `vue-pronto` which uses Vueify
+- Re-structured the vueOptions
+- Added req.vueOptions as a global.
+- Removed the vue parent object with the child of head, this was un-needed its now just vueOptions.head instead of vueOptions.vue.head
+- when using `res.renderVue` the filename requires an extention now.
+- Paths are now RELATIVE to the file you're currently in ... YAAAY
+- Node Modules are supported, for both javascript and vue file imports inside .vue files ... YAAAY
+- Massive Performance gains
+- 100% compatability with vueJS
 
-Sorry for the breaking change, but I'm only one person.
+#### V4
+- v4 was a complete re-write.. migrating from v3 to v4 will break everything.
+- No longer is res.render used, its now res.renderVue
+- Now replies with streams instead of a single sync call
+- massive performance increase
+- import vue components in your vue files!
+- lots of other changes
+
+#### V3
+- v3 has seriously changed the object you pass into the vue file.. so please if migrating from
+an earlier version (and you should). Take the time to look at the new object. Sorry for the breaking change, but I'm only one person.
 
 ## License
 

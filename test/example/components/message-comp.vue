@@ -1,4 +1,4 @@
-<template lang="html">
+<template>
   <div class="">
       <h1>{{message}}</h1>
   </div>
@@ -11,7 +11,4 @@ export default {
 </script>
 
 <style lang="css">
-    .test {
-        color: blue;
-    }
 </style>
